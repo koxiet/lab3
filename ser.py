@@ -4,9 +4,17 @@ from datetime import datetime
 import json
 import sys
 
-udp_port = 5005
 chat_history = []
 connected_users = {}
+
+
+def is_port_in_use(ip, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((ip, port))
+            return False
+        except OSError:
+            return True
 
 
 def save_history():
@@ -14,7 +22,7 @@ def save_history():
         with open('chat_history.json', 'w', encoding='utf-8') as f:
             json.dump(chat_history, f, ensure_ascii=False)
     except Exception as e:
-        print( {e})
+        print({e})
 
 
 def load_history():
@@ -37,7 +45,7 @@ def broadcast(message, exclude_socket=None):
                 continue
 
 
-def tcp(client_sock, client_ip, username, server_socket_udp):
+def tcp(client_sock, client_ip, username):
     global chat_history
 
     welcome_msg = f"Добро пожаловать, {username}"
@@ -84,7 +92,6 @@ def tcp(client_sock, client_ip, username, server_socket_udp):
     try:
         if client_sock in connected_users:
             del connected_users[client_sock]
-        server_socket_udp.sendto(leave_message.encode("utf-8"), (client_ip, udp_port))
         broadcast(leave_message)
     except Exception as e:
         print(f"Ошибка при отправке сообщения: {e}")
@@ -98,6 +105,9 @@ def tcp(client_sock, client_ip, username, server_socket_udp):
 def start_server(server_ip, server_tcp_port):
     global chat_history
     chat_history = load_history()
+    if is_port_in_use(server_ip, server_tcp_port):
+        print(f"Порт {server_tcp_port} на IP {server_ip} уже занят")
+        sys.exit(1)
 
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -111,15 +121,6 @@ def start_server(server_ip, server_tcp_port):
     print(f"Сервер запущен на {server_ip}:{server_tcp_port}")
 
     try:
-        server_socket_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        server_socket_udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket_udp.bind(('0.0.0.0', udp_port))
-    except OSError as e:
-        print({e})
-        server_socket.close()
-        sys.exit(1)
-
-    try:
         while True:
             try:
                 client_socket, (client_ip, _) = server_socket.accept()
@@ -131,13 +132,8 @@ def start_server(server_ip, server_tcp_port):
                 chat_history.append(start_message)
                 save_history()
 
-                try:
-                    server_socket_udp.sendto(start_message.encode("utf-8"), (client_ip, udp_port))
-                    broadcast(start_message, exclude_socket=client_socket)
-                except Exception as e:
-                    print({e})
-
-                start_new_thread(tcp, (client_socket, client_ip, username, server_socket_udp))
+                broadcast(start_message, exclude_socket=client_socket)
+                start_new_thread(tcp, (client_socket, client_ip, username))
 
             except Exception as e:
                 print({e})
@@ -146,7 +142,6 @@ def start_server(server_ip, server_tcp_port):
     except KeyboardInterrupt:
         print("\nСервер завершает работу")
     finally:
-        server_socket_udp.close()
         server_socket.close()
         print("Сервер остановлен")
 

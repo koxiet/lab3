@@ -2,8 +2,6 @@ import socket
 from _thread import *
 import sys
 
-udp_port = 17
-
 
 def receive(client_socket):
     while True:
@@ -41,7 +39,6 @@ def client_start(ip, server_port, tcp_port, client_ip):
         client_sock.send(username.encode('utf-8'))
 
         print(f"\nВы подключились как {username}")
-
 
         start_new_thread(receive, (client_sock,))
 
